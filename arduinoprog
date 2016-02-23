@@ -1,0 +1,197 @@
+
+#include <Password.h> //http://www.arduino.cc/playground/uploads/Code/Password.zip
+#include <Keypad.h> //http://www.arduino.cc/playground/uploads/Code/Keypad.zip
+#include <LiquidCrystal595.h>    // include the library
+#include <Servo.h>//include servo library
+
+LiquidCrystal595 lcd(2,3,4);     // datapin, latchpin, clockpin
+
+int buzzer=5;
+int pir=13;
+
+//servo
+Servo myservo;  // create servo object to control a servo 
+int initialpos=90;// door will be closed
+int finalpos= 180;// door will be open
+
+
+Password password = Password( "1234" );
+
+const byte ROWS = 4; // Four rows
+const byte COLS = 3; //  columns
+// Define the Keymap
+char keys[ROWS][COLS] =
+{
+  {'1','2','3'},
+  {'4','5','6'},
+  {'7','8','9'},
+  {'*','0','#'}
+};
+
+byte rowPins[ROWS] = { 6,7,8,9 };// Connect keypad ROW0, ROW1, ROW2 and ROW3 to these Arduino pins.
+byte colPins[COLS] = { 10,11,12 };// Connect keypad COL0, COL1 and COL2 to these Arduino pins.
+
+
+// Create the Keypad
+Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS );
+
+
+int alarmStatus = 0;
+int alarmActive = 0;
+
+void setup()
+{
+  lcd.begin(16,2);
+  displayEntryScreen();
+  myservo.attach(A0);
+  pinMode(pir,INPUT);
+  pinMode(buzzer,OUTPUT); //BUZZER AS OUTPUT
+  Serial.begin(9600);
+  keypad.addEventListener(keypadEvent); //add an event listener for this keypad
+  keypad.setDebounceTime(20);  // NOTE!
+ }
+
+void loop()
+{
+    keypad.getKey();   
+    Serial.println(digitalRead(pir));
+      if (alarmActive == 0)
+      {      
+    if (digitalRead(pir) == 1)
+    { 
+      alarmTriggered();
+    }
+      }
+}
+
+
+///////////////////////////KEYPAD///////////////////////////////////////////////////
+//take care of some special events
+void keypadEvent(KeypadEvent eKey)
+{      
+     switch (keypad.getState())
+  {
+    case PRESSED:
+	Serial.print(eKey);  
+        lcd.print(eKey);
+	switch (eKey)
+         {
+	  case '*': checkPassword(); break;
+	  case '#': password.reset(); break;
+	  default: password.append(eKey);
+          }
+    }
+}
+
+///////////////////////////////////alert/////////////////////////////////////////////////////
+
+void alarmTriggered()
+{
+   //BUZZER 
+  digitalWrite(buzzer,HIGH);
+  delay(500);
+  digitalWrite(buzzer,LOW);
+  delay(500);
+  digitalWrite(buzzer,HIGH);
+  delay(500);
+  digitalWrite(buzzer,LOW);
+  delay(500);
+  digitalWrite(buzzer,HIGH);
+  delay(500);
+  digitalWrite(buzzer,LOW);
+  delay(500);
+  
+ // GSM CODE BLOCK 
+  delay(100);
+  Serial.print("AT+CMGS=");
+  Serial.print('"');
+  Serial.print("08108342362");
+  Serial.print('"');
+  Serial.print('\r');
+  Serial.print("HOME SECURITY BREAK!!!");
+ 
+  password.reset();
+  alarmStatus = 1;
+  // alarmActive = 0;
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("SYSTEM TRIGGERED");
+  lcd.setCursor(0,1);
+  lcd.print("     alert!! ");
+  delay(4000);
+  displayEntryScreen();
+}
+///////////////////////////CHECK PASSWORD///////////////////////////////////////////////////
+void checkPassword()
+{                  // To check if PIN is corrected, if not, retry!
+  if (password.evaluate())
+  {  
+    if(alarmActive == 0 && alarmStatus == 0)
+    {
+      activate();
+    } 
+    else if( alarmActive == 1 || alarmStatus == 1) {
+      deactivate();
+    }
+  } 
+  else {
+    invalidCode();
+  }
+}  
+///////////////////////////DEACTIVATE///////////////////////////////////////////////////
+void deactivate()
+{
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("SYSTEM");
+  lcd.setCursor(0,1);
+  lcd.print("DEACTIVATED!");
+  digitalWrite(buzzer, LOW);
+  alarmActive = 0;
+  password.reset();
+  delay(2000);
+  displayEntryScreen();
+}
+///////////////////////////INVALID CODE///////////////////////////////////////////////////
+void invalidCode()
+{
+  password.reset();
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("INVALID CODE!LOL!");
+  lcd.setCursor(3,1);
+  lcd.print("TRY AGAIN!");
+  delay(3000);
+  displayEntryScreen();  
+}
+///////////////////////////ACTIVATE///////////////////////////////////////////////////
+void activate()      // Activate the system if correct PIN entered and display message on the screen
+{
+  if(digitalRead(pir) == LOW)
+  {
+    lcd.setCursor(0,0);
+    lcd.print("SYSTEM ACTIVE!"); 
+    alarmActive = 1;
+    password.reset();
+    delay(2000);
+ displayEntryScreen();
+ openDoor(2000);  
+}
+}
+
+///////////////////////////////////////// Unlock Door   ///////////////////////////////////
+void openDoor( int setDelay ) 
+{ 
+  myservo.write(finalpos);
+  delay(setDelay); // Hold door lock open for given seconds
+  myservo.write(initialpos); // Relock door
+}
+//////////////////////////////display//////////////////////////////////////////////////////
+void displayEntryScreen()
+{
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Enter PIN:");
+  lcd.setCursor(0,1);
+  lcd.print("-->");
+}
